@@ -1,17 +1,11 @@
-GPU=0
-CUDNN=0
-OPENCV=0
-OPENMP=0
-DEBUG=0
-
-ARCH= -gencode arch=compute_30,code=sm_30 \
-      -gencode arch=compute_35,code=sm_35 \
-      -gencode arch=compute_50,code=[sm_50,compute_50] \
-      -gencode arch=compute_52,code=[sm_52,compute_52]
-#      -gencode arch=compute_20,code=[sm_20,sm_21] \ This one is deprecated?
-
-# This is what I use, uncomment if you know your arch and want to specify
-# ARCH= -gencode arch=compute_52,code=compute_52
+GPU ?= 0
+CUDNN ?= 0
+OPENCV ?= 0
+OPENMP ?= 0
+DEBUG ?= 0
+CUDA_ARCHITECTURES ?= 52 61 70 75 80 86 89
+comma := ,
+ARCH := $(strip $(foreach arch,$(CUDA_ARCHITECTURES),-gencode arch=compute_$(arch)$(comma)code=[sm_$(arch),compute_$(arch)]))
 
 VPATH=./src/:./examples
 SLIB=libdarknet.so
@@ -29,6 +23,12 @@ LDFLAGS= -lm -pthread
 COMMON= -Iinclude/ -Isrc/
 CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
 
+PKG_CONFIG ?= pkg-config
+PKG_CONFIG_PATH ?=
+export PKG_CONFIG_PATH
+
+OPENCV_PKG ?= opencv4
+
 ifeq ($(OPENMP), 1) 
 CFLAGS+= -fopenmp
 endif
@@ -42,8 +42,8 @@ CFLAGS+=$(OPTS)
 ifeq ($(OPENCV), 1) 
 COMMON+= -DOPENCV
 CFLAGS+= -DOPENCV
-LDFLAGS+= `pkg-config --libs opencv` -lstdc++
-COMMON+= `pkg-config --cflags opencv` 
+LDFLAGS+= `PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" $(PKG_CONFIG) --libs $(OPENCV_PKG) 2>/dev/null || PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" $(PKG_CONFIG) --libs opencv` -lstdc++
+COMMON+= `PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" $(PKG_CONFIG) --cflags $(OPENCV_PKG) 2>/dev/null || PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" $(PKG_CONFIG) --cflags opencv` 
 endif
 
 ifeq ($(GPU), 1) 
@@ -102,4 +102,3 @@ results:
 
 clean:
 	rm -rf $(OBJS) $(SLIB) $(ALIB) $(EXEC) $(EXECOBJ) $(OBJDIR)/*
-

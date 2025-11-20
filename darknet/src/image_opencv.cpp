@@ -9,60 +9,51 @@ using namespace cv;
 
 extern "C" {
 
-IplImage *image_to_ipl(image im)
-{
-    int x,y,c;
-    IplImage *disp = cvCreateImage(cvSize(im.w,im.h), IPL_DEPTH_8U, im.c);
-    int step = disp->widthStep;
-    for(y = 0; y < im.h; ++y){
-        for(x = 0; x < im.w; ++x){
-            for(c= 0; c < im.c; ++c){
-                float val = im.data[c*im.h*im.w + y*im.w + x];
-                disp->imageData[y*step + x*im.c + c] = (unsigned char)(val*255);
-            }
-        }
-    }
-    return disp;
-}
-
-image ipl_to_image(IplImage* src)
-{
-    int h = src->height;
-    int w = src->width;
-    int c = src->nChannels;
-    image im = make_image(w, h, c);
-    unsigned char *data = (unsigned char *)src->imageData;
-    int step = src->widthStep;
-    int i, j, k;
-
-    for(i = 0; i < h; ++i){
-        for(k= 0; k < c; ++k){
-            for(j = 0; j < w; ++j){
-                im.data[k*w*h + i*w + j] = data[i*step + j*c + k]/255.;
-            }
-        }
-    }
-    return im;
-}
-
 Mat image_to_mat(image im)
 {
     image copy = copy_image(im);
     constrain_image(copy);
     if(im.c == 3) rgbgr_image(copy);
 
-    IplImage *ipl = image_to_ipl(copy);
-    Mat m = cvarrToMat(ipl, true);
-    cvReleaseImage(&ipl);
+    Mat m(copy.h, copy.w, CV_8UC(copy.c));
+    for(int y = 0; y < copy.h; ++y){
+        unsigned char *row = m.ptr<unsigned char>(y);
+        for(int x = 0; x < copy.w; ++x){
+            for(int c = 0; c < copy.c; ++c){
+                int dst_index = x*copy.c + c;
+                int src_index = c*copy.h*copy.w + y*copy.w + x;
+                float val = copy.data[src_index];
+                row[dst_index] = (unsigned char)(val*255);
+            }
+        }
+    }
     free_image(copy);
     return m;
 }
 
 image mat_to_image(Mat m)
 {
-    IplImage ipl = m;
-    image im = ipl_to_image(&ipl);
-    rgbgr_image(im);
+    Mat src;
+    if(m.channels() == 3){
+        cvtColor(m, src, COLOR_BGR2RGB);
+    } else {
+        src = m;
+    }
+
+    int h = src.rows;
+    int w = src.cols;
+    int c = src.channels();
+    image im = make_image(w, h, c);
+    for(int y = 0; y < h; ++y){
+        const unsigned char *row = src.ptr<unsigned char>(y);
+        for(int x = 0; x < w; ++x){
+            for(int k = 0; k < c; ++k){
+                int dst_index = k*w*h + y*w + x;
+                int src_index = x*c + k;
+                im.data[dst_index] = row[src_index]/255.;
+            }
+        }
+    }
     return im;
 }
 
@@ -72,9 +63,9 @@ void *open_video_stream(const char *f, int c, int w, int h, int fps)
     if(f) cap = new VideoCapture(f);
     else cap = new VideoCapture(c);
     if(!cap->isOpened()) return 0;
-    if(w) cap->set(CV_CAP_PROP_FRAME_WIDTH, w);
-    if(h) cap->set(CV_CAP_PROP_FRAME_HEIGHT, w);
-    if(fps) cap->set(CV_CAP_PROP_FPS, w);
+    if(w) cap->set(cv::CAP_PROP_FRAME_WIDTH, w);
+    if(h) cap->set(cv::CAP_PROP_FRAME_HEIGHT, h);
+    if(fps) cap->set(cv::CAP_PROP_FPS, fps);
     return (void *) cap;
 }
 
@@ -123,7 +114,7 @@ void make_window(char *name, int w, int h, int fullscreen)
 {
     namedWindow(name, WINDOW_NORMAL); 
     if (fullscreen) {
-        setWindowProperty(name, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+        setWindowProperty(name, cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
     } else {
         resizeWindow(name, w, h);
         if(strcmp(name, "Demo") == 0) moveWindow(name, 0, 0);
